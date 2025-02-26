@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "OpenCloak"
 include(":app")
- 
+include(":ics-openvpn-0.7.55")

@@ -1,26 +1,24 @@
 package com.hotmail.shaundalco.opencloak
 
-import android.app.Activity
 import android.content.Intent
-import android.net.VpnService
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
+import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.hotmail.shaundalco.opencloak.ui.theme.OpenCloakTheme
+import de.blinkt.openvpn.OpenVPNService
 
 class MainActivity : ComponentActivity() {
-    // Define request code for VPN permission
-    val REQUEST_CODE_VPN_PERMISSION = 1
+    private val REQUEST_CODE_VPN_PERMISSION = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,30 +32,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Handle result of permission request (for VPN)
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
-        // Check if the request code matches the VPN permission request
         if (requestCode == REQUEST_CODE_VPN_PERMISSION) {
-            if (resultCode == Activity.RESULT_OK) {
-                // Start VPN service when permission is granted
-                val vpnServiceIntent = Intent(this, MyVpnService::class.java)
-                startService(vpnServiceIntent)
+            if (resultCode == RESULT_OK) {
+                // Proceed to start the OpenVPN service
+                startOpenVpnService()
             } else {
-                // Handle VPN permission denial
-                Log.e("VpnService", "VPN permission denied")
+                // Handle case where permission is denied
+                Log.e("OpenVPN", "VPN permission denied")
             }
         }
+    }
+
+    private fun startOpenVpnService() {
+        // Configure the OpenVPN intent with the .ovpn configuration file
+        val openvpnIntent = Intent(this, OpenVPNService::class.java)
+        openvpnIntent.putExtra("config", "/path/to/your/openvpn/config.ovpn")
+        startService(openvpnIntent)
     }
 }
 
 @Composable
-fun VpnServiceControl(activity: Activity) {
-    // Track whether VPN is active
+fun VpnServiceControl(activity: MainActivity) {
     var isVpnActive by remember { mutableStateOf(false) }
 
-    // UI Layout with Button to toggle VPN status
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -70,11 +70,9 @@ fun VpnServiceControl(activity: Activity) {
         Button(
             onClick = {
                 if (isVpnActive) {
-                    // Stop VPN service
-                    stopVpnService(activity)
+                    stopOpenVpnService(activity)
                 } else {
-                    // Start VPN service with permission check
-                    startVpnService(activity)
+                    startOpenVpnService(activity)
                 }
                 isVpnActive = !isVpnActive
             }
@@ -84,21 +82,20 @@ fun VpnServiceControl(activity: Activity) {
     }
 }
 
-private fun startVpnService(activity: Activity) {
-    // Check if VPN permission is granted using VpnService.prepare()
-    val intent = VpnService.prepare(activity)
+private fun startOpenVpnService(activity: MainActivity) {
+    // Check if OpenVPN permission is granted
+    val intent = OpenVPNService.prepare(activity)
     if (intent != null) {
-        // If permission hasn't been granted, ask the user to allow it
-        activity.startActivityForResult(intent, (activity as MainActivity).REQUEST_CODE_VPN_PERMISSION)
+        // If permission hasn't been granted, start the activity to ask for permission
+        activity.startActivityForResult(intent, activity.REQUEST_CODE_VPN_PERMISSION)
     } else {
-        // Permission is already granted, start the VPN service directly
-        val vpnServiceIntent = Intent(activity, MyVpnService::class.java)
-        activity.startService(vpnServiceIntent)
+        // Permission granted, start OpenVPN service directly
+        activity.startOpenVpnService()
     }
 }
 
-private fun stopVpnService(activity: Activity) {
-    // Stop the VPN service
-    val vpnServiceIntent = Intent(activity, MyVpnService::class.java)
-    activity.stopService(vpnServiceIntent)
+private fun stopOpenVpnService(activity: MainActivity) {
+    // Stop the OpenVPN service
+    val stopIntent = Intent(activity, OpenVPNService::class.java)
+    activity.stopService(stopIntent)
 }
