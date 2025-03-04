@@ -8,6 +8,8 @@ android {
     namespace = "com.hotmail.shaundalco.opencloak"
     compileSdk = 35
 
+
+
     defaultConfig {
         applicationId = "com.hotmail.shaundalco.opencloak"
         minSdk = 24
@@ -17,6 +19,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
 
     buildTypes {
         release {
@@ -37,7 +40,11 @@ android {
     buildFeatures {
         compose = true
     }
+
+
 }
+
+
 
 dependencies {
 
@@ -49,6 +56,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

@@ -1,101 +1,136 @@
 package com.hotmail.shaundalco.opencloak
 
-import android.content.Intent
+import android.annotation.SuppressLint
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.hotmail.shaundalco.opencloak.model.Server
 import com.hotmail.shaundalco.opencloak.ui.theme.OpenCloakTheme
-import de.blinkt.openvpn.OpenVPNService
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    private val REQUEST_CODE_VPN_PERMISSION = 1
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             OpenCloakTheme {
-                // Surface container with background
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    VpnServiceControl(this)
+                MainScreen()
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+@Composable
+fun MainScreen() {
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
+    val serverList = remember { getServerList() }
+    var selectedServer by remember { mutableStateOf<Server?>(null) }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            DrawerContent(serverList) { server ->
+                selectedServer = server
+                coroutineScope.launch { drawerState.close() }
+            }
+        }
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("OpenCloak VPN") },
+                    navigationIcon = {
+                        IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
+                            Icon(imageVector = Icons.Filled.Menu, contentDescription = "Menu")
+                        }
+                    }
+                )
+            }
+        ) {
+            selectedServer?.let { server ->
+                ServerDetailScreen(server)
+            } ?: run {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Select a server from the menu")
                 }
             }
         }
     }
+}
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
 
-        if (requestCode == REQUEST_CODE_VPN_PERMISSION) {
-            if (resultCode == RESULT_OK) {
-                // Proceed to start the OpenVPN service
-                startOpenVpnService()
-            } else {
-                // Handle case where permission is denied
-                Log.e("OpenVPN", "VPN permission denied")
+@Composable
+fun DrawerContent(serverList: List<Server>, onServerSelected: (Server) -> Unit) {
+    LazyColumn {
+        items(serverList) { server ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onServerSelected(server) }
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.test),
+                    contentDescription = server.country,
+                    modifier = Modifier.size(40.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                server.country?.let { Text(text = it) }
             }
         }
-    }
-
-    private fun startOpenVpnService() {
-        // Configure the OpenVPN intent with the .ovpn configuration file
-        val openvpnIntent = Intent(this, OpenVPNService::class.java)
-        openvpnIntent.putExtra("config", "/path/to/your/openvpn/config.ovpn")
-        startService(openvpnIntent)
     }
 }
 
 @Composable
-fun VpnServiceControl(activity: MainActivity) {
-    var isVpnActive by remember { mutableStateOf(false) }
-
+fun ServerDetailScreen(server: Server) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = if (isVpnActive) "VPN is Active" else "VPN is Inactive")
+        Image(
+            painter = painterResource(id = R.drawable.test),
+            contentDescription = server.country,
+            modifier = Modifier.size(80.dp)
+        )
         Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = {
-                if (isVpnActive) {
-                    stopOpenVpnService(activity)
-                } else {
-                    startOpenVpnService(activity)
-                }
-                isVpnActive = !isVpnActive
-            }
-        ) {
-            Text(text = if (isVpnActive) "Stop VPN" else "Start VPN")
-        }
+        Text(text = "Connected to ${server.country}", style = MaterialTheme.typography.headlineLarge)
     }
 }
 
-private fun startOpenVpnService(activity: MainActivity) {
-    // Check if OpenVPN permission is granted
-    val intent = OpenVPNService.prepare(activity)
-    if (intent != null) {
-        // If permission hasn't been granted, start the activity to ask for permission
-        activity.startActivityForResult(intent, activity.REQUEST_CODE_VPN_PERMISSION)
-    } else {
-        // Permission granted, start OpenVPN service directly
-        activity.startOpenVpnService()
-    }
+fun getServerList(): List<Server> {
+    return listOf(
+        Server("United States", "", "us.ovpn", "freeopenvpn", "416248023"),
+        Server("Japan", "", "japan.ovpn", "vpn", "vpn"),
+        Server("Sweden", "", "sweden.ovpn", "vpn", "vpn"),
+        Server("Korea", "", "korea.ovpn", "vpn", "vpn")
+    )
 }
 
-private fun stopOpenVpnService(activity: MainActivity) {
-    // Stop the OpenVPN service
-    val stopIntent = Intent(activity, OpenVPNService::class.java)
-    activity.stopService(stopIntent)
-}

@@ -22,5 +22,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "OpenCloak"
-include(":app")
-include(":main")
+include(":app", ":vpnLib")
