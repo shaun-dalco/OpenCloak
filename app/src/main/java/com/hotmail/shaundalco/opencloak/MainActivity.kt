@@ -1,10 +1,8 @@
 package com.hotmail.shaundalco.opencloak
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.net.wifi.hotspot2.ConfigParser
 import android.os.Bundle
+import android.os.RemoteException
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -16,23 +14,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import com.hotmail.shaundalco.opencloak.model.Server
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import de.blinkt.openvpn.OpenVpnApi
 import java.io.BufferedReader
+import java.io.IOException
+import java.io.InputStream
 import java.io.InputStreamReader
-
-import de.blinkt.openvpn.OpenVpnApi;
-import de.blinkt.openvpn.core.OpenVPNService;
-import de.blinkt.openvpn.core.OpenVPNThread;
-import de.blinkt.openvpn.core.ProfileManager
-import de.blinkt.openvpn.core.VpnStatus;
+import java.security.AccessController.getContext
 
 
 class MainActivity : ComponentActivity() {
@@ -68,7 +59,7 @@ fun VPNServerListScreen(servers: List<Server>) {
         ) {
             items(servers) { server ->
                 VPNServerItem(server) {
-                    startVpnConnection(context, server)
+                    startVpn(context, server)
                 }
             }
         }
@@ -102,44 +93,28 @@ fun VPNServerItem(server: Server, onClick: () -> Unit) {
     }
 }
 
-/**
- * Reads an OVPN file from assets and returns its content as a string.
- */
-suspend fun getOvpnConfigFromAssets(context: Context, ovpnFileName: String): String {
-    return withContext(Dispatchers.IO) {
-        val inputStream = context.assets.open(ovpnFileName)
+fun startVpn(context: Context, server: Server) {
+    try {
+        // Read .ovpn file
+        val inputStream = server.ovpn?.let { context.assets.open(it) }
         val reader = BufferedReader(InputStreamReader(inputStream))
-        val content = reader.readText()
+        val config = buildString {
+            reader.forEachLine { append(it).append("\n") }
+        }
         reader.close()
-        content
-    }
-}
 
-/**
- * Starts a VPN connection using ics-openvpn.
- */
-fun startVpnConnection(context: Context, server: Server) {
-    val profileManager = ProfileManager.getInstance(context)
-    val vpnService = VpnStatus.getLastConnectedVPN()
+        // Start VPN
+        OpenVpnApi.startVpn(
+            context,
+            config,
+            server.country,
+            server.ovpnUserName,
+            server.ovpnUserPassword
+        )
 
-    if (vpnService != null) {
-        VpnStatus.logInfo("Disconnecting existing VPN...")
-        VpnStatus.updateState("Disconnecting", "Disconnecting current VPN...", 0, VpnStatus.ConnectionStatus.LEVEL_NOTCONNECTED)
-        OpenVPNThread.stopVPN()
-    }
-
-    // Load OVPN from assets
-    GlobalScope.launch(Dispatchers.Main) {
-        val ovpnConfig = getOvpnConfigFromAssets(context, server.ovpn!!)
-
-        // Create VPN profile
-        val vpnProfile = ConfigParser().parseConfig(ovpnConfig.byteInputStream())
-        vpnProfile.mName = server.country ?: "VPN Server"
-
-        // Save and connect
-        profileManager.addProfile(vpnProfile)
-        profileManager.saveProfile(context, vpnProfile)
-
-        OpenVPNService.startVpn(context, vpnProfile)
+    } catch (e: IOException) {
+        e.printStackTrace()
+    } catch (e: RemoteException) {
+        e.printStackTrace()
     }
 }

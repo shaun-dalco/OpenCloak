@@ -1,17 +1,26 @@
 apply plugin: 'com.android.library'
 android {
-    compileSdkVersion 33
+    compileSdk 35
 
-    namespace = "de.blinkt.openvpn"
+    namespace "de.blinkt.openvpn"
+    buildFeatures.aidl = true
 
     defaultConfig {
-        minSdkVersion 16
-        targetSdkVersion 33
+        minSdkVersion 24
+        targetSdkVersion 35
         versionCode 1
         versionName "1.0"
 
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
 
+    }
+    sourceSets {
+        main {
+            aidl.srcDirs = ['src/main/aidl']
+        }
+    }
+    buildFeatures {
+        buildConfig true
     }
     buildTypes {
         release {
