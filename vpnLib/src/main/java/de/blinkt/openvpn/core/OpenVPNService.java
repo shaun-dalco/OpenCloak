@@ -111,6 +111,7 @@ public class OpenVPNService extends VpnService implements StateListener, Callbac
     private boolean mStarting = false;
     private long mConnecttime;
     private OpenVPNManagement mManagement;
+
     /*private final IBinder mBinder = new IOpenVPNServiceInternal.Stub() {
 
         @Override
@@ -1317,9 +1318,10 @@ public class OpenVPNService extends VpnService implements StateListener, Callbac
         vpnstatus.setAction("de.blinkt.openvpn.VPN_STATUS");
         vpnstatus.putExtra("status", level.toString());
         vpnstatus.putExtra("detailstatus", state);
-        sendBroadcast(vpnstatus, permission.ACCESS_NETWORK_STATE);
+        sendBroadcast(vpnstatus);//, permission.ACCESS_NETWORK_STATE);
         sendMessage(state);
     }
+
 
     long c = Calendar.getInstance().getTimeInMillis();
     long time;

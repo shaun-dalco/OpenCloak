@@ -2,13 +2,12 @@ package com.hotmail.shaundalco.opencloak
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.ComponentName
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
+import android.content.IntentFilter
 import android.net.VpnService
 import android.os.Bundle
-import android.os.IBinder
 import android.os.RemoteException
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -27,16 +26,14 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
@@ -45,7 +42,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -58,35 +55,59 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.rememberAsyncImagePainter
 import com.chihsuanwu.freescroll.freeScroll
 import com.chihsuanwu.freescroll.rememberFreeScrollState
 import com.hotmail.shaundalco.opencloak.model.Server
 import de.blinkt.openvpn.OpenVpnApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
-import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
-import java.io.InputStream
 import java.io.InputStreamReader
-import java.security.AccessController.getContext
+
 
 val servers = listOf(
+    Server("Russia", "https://flagcdn.com/us.png", "russia.ovpn", "freeopenvpn", "494305175"),
     Server("USA", "https://flagcdn.com/us.png", "us.ovpn", "freeopenvpn", "889369906"),
     Server("UK", "https://flagcdn.com/gb.png", "japan.ovpn"),
     Server("Germany", "https://flagcdn.com/de.png", "sweden.ovpn")
 )
 
+val nodes = listOf(
+    NodeData("Russia", 1000.dp, 500.dp),
+    NodeData("Canada", 400.dp, 500.dp),
+    NodeData("Australia", 1100.dp, 900.dp),
+    NodeData("Japan", 900.dp, 200.dp),
+    NodeData("Germany", 600.dp, 120.dp)
+)
+
+private val vpnStateFlow = MutableStateFlow("LEVEL_NOTCONNECTED") // Holds the latest VPN state
+
 class MainActivity : ComponentActivity() {
 
+    private val vpnStatusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "de.blinkt.openvpn.VPN_STATUS") { // Use correct action
+                val state = intent.getStringExtra("status") ?: "LEVEL_NOTCONNECTED"
+                vpnStateFlow.value = state
+            }
+        }
+    }
+
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Register BroadcastReceiver
+        val filter = IntentFilter("de.blinkt.openvpn.VPN_STATUS")
+        registerReceiver(vpnStatusReceiver, filter)
 
         try {
             println("🔹 Loading OpenVPN binary...")
@@ -105,38 +126,107 @@ class MainActivity : ComponentActivity() {
             ConnectButton()
         }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(vpnStatusReceiver)
+    }
 }
 
 @Composable
 fun ConnectButton() {
-    val pulseAnimation = rememberInfiniteTransition()
     val context = LocalContext.current
+    val vpnState by vpnStateFlow.collectAsState()
+
+    // Determine button properties based on VPN state
+    val buttonProperties = when (vpnState) {
+        "LEVEL_NOTCONNECTED" -> ButtonProperties("Connect", Color(0xFF00FFFF), Color(0xFF121212), 22.sp) // Blue theme
+        "LEVEL_CONNECTING_NO_SERVER_REPLY_YET" -> ButtonProperties("Connecting... no reply yet", Color(0xFFFFD700), Color(0xFF222200), 10.sp) // Yellow theme
+        "LEVEL_CONNECTING_SERVER_REPLIED" -> ButtonProperties("Connecting... server replied", Color(0xFFFFD700), Color(0xFF222200), 10.sp) // Yellow theme
+        "LEVEL_CONNECTED" -> ButtonProperties("Connected", Color(0xFF00FF00), Color(0xFF002200), 22.sp) // Green theme
+        else -> ButtonProperties("Connect", Color(0xFF00FFFF), Color(0xFF121212), 22.sp) // Default to blue
+    }
+
+    val pulseAnimation = rememberInfiniteTransition()
     val scale by pulseAnimation.animateFloat(
         initialValue = 1f,
-        targetValue = 1.2f,
+        targetValue = 1.1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1000, easing = LinearEasing),
+            animation = tween(durationMillis = 1200, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         )
     )
 
+    // VPN permission request launcher
+    val vpnPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            println("VPN permission granted. Starting VPN...")
+            startVpn(context, servers[0], {})
+        } else {
+            println("VPN permission denied.")
+        }
+    }
+
     Box(
-        modifier = Modifier
-            .fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.BottomCenter
     ) {
-        Button(
-            onClick = { startVpn(context, servers[0]) },
+        Box(
             modifier = Modifier
-                .padding(bottom = 50.dp)
-                .size((150 * scale).dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color.Gray),
-            shape = CircleShape
+                .padding(bottom = 60.dp)
+                .size((160 * scale).dp)
+                .clip(CircleShape)
+                .background(buttonProperties.backgroundColor) // Fix for background ambiguity
+                .border(
+                    width = 4.dp,
+                    color = buttonProperties.textColor.copy(alpha = 0.8f),
+                    shape = CircleShape
+                )
+                .shadow(16.dp, CircleShape)
+                .clickable {
+                    val vpnIntent = VpnService.prepare(context)
+                    if (vpnIntent != null) {
+                        vpnPermissionLauncher.launch(vpnIntent)
+                    } else {
+                        startVpn(context, servers[0], {})
+                    }
+                },
+            contentAlignment = Alignment.Center
         ) {
-            Text("CONNECT", color = Color.White, fontSize = 18.sp)
+            Canvas(modifier = Modifier.matchParentSize()) {
+                drawCircle(
+                    color = buttonProperties.textColor.copy(alpha = 0.5f),
+                    radius = size.minDimension / 2.5f
+                )
+            }
+
+            Text(
+                text = buttonProperties.text,
+                fontSize = buttonProperties.fontSize,
+                fontWeight = FontWeight.Bold,
+                color = buttonProperties.textColor,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .shadow(8.dp)
+                    .fillMaxWidth()
+            )
         }
     }
 }
+
+// Helper data class to store button properties
+data class ButtonProperties(
+    val text: String,
+    val textColor: Color,
+    val backgroundColor: Color,
+    val fontSize: TextUnit
+)
+
+
+
+
 
 @Composable
 fun VPNMapScreen() {
@@ -209,14 +299,6 @@ fun MainScreen() {
     val scrollState = rememberScrollState()
     val nodePositions = remember { mutableMapOf<Int, Dp>() } // Stores node Y positions
     var showSettingsMenu by remember { mutableStateOf(false) } // Controls the settings menu
-
-    val nodes = listOf(
-        NodeData("RUSSIA", 1000.dp, 500.dp),
-        NodeData("CANADA", 400.dp, 500.dp),
-        NodeData("Australia", 1100.dp, 900.dp),
-        NodeData("Japan", 900.dp, 200.dp),
-        NodeData("Germany", 600.dp, 120.dp)
-    )
 
     val selectedCountry by derivedStateOf { nodes[currentVpn!!].country } // Observe changes
 
@@ -339,13 +421,6 @@ fun NavigationDrawerContent(
 
 @Composable
 fun NodeOverlay() {
-    val nodes = listOf(
-        NodeData("RUSSIA", 1000.dp, 500.dp),
-        NodeData("CANADA", 400.dp, 500.dp),
-        NodeData("Australia", 1100.dp, 900.dp),
-        NodeData("Japan", 900.dp, 200.dp),
-        NodeData("Germany", 600.dp, 120.dp)
-    )
 
     Box(modifier = Modifier.fillMaxSize()) {
         nodes.forEachIndexed { index, node ->
@@ -430,9 +505,17 @@ data class NodeData(val country: String, val x: Dp, val y: Dp)
 
 
 
-fun startVpn(context: Context, server: Server) {
-
+fun startVpn(context: Context, server: Server, onPermissionRequired: () -> Unit) {
     try {
+        // Check if VPN permissions are granted
+        val vpnIntent = VpnService.prepare(context)
+        if (vpnIntent != null) {
+            // Request VPN permission
+            onPermissionRequired()
+            println("VPN permission requested.")
+            return
+        }
+
         // Ensure OVPN file is provided
         val ovpnFileName = server.ovpn ?: return
         val inputStream = context.assets.open(ovpnFileName)
@@ -441,14 +524,13 @@ fun startVpn(context: Context, server: Server) {
         // Read the OpenVPN configuration
         val config = reader.use { it.readText() }
 
-        // Debugging: Log the loaded config
-        //println("Loaded VPN Config: $config")
-
         // Validate the configuration before attempting to start
         if (config.isBlank()) {
             println("Error: OpenVPN configuration is empty!")
             return
         }
+
+        println(server.country)
 
         // Start OpenVPN
         OpenVpnApi.startVpn(
@@ -470,5 +552,34 @@ fun startVpn(context: Context, server: Server) {
     } catch (e: Exception) {
         e.printStackTrace()
         println("Unexpected error starting VPN: ${e.localizedMessage}")
+    }
+}
+
+/**
+ * Receive broadcast message
+ */
+var broadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        try {
+            var status = intent.getStringExtra("state")
+            println("Current status: $status")
+        } catch (e: java.lang.Exception) {
+            e.printStackTrace()
+        }
+
+        try {
+            var duration = intent.getStringExtra("duration")
+            var lastPacketReceive = intent.getStringExtra("lastPacketReceive")
+            var byteIn = intent.getStringExtra("byteIn")
+            var byteOut = intent.getStringExtra("byteOut")
+
+            if (duration == null) duration = "00:00:00"
+            if (lastPacketReceive == null) lastPacketReceive = "0"
+            if (byteIn == null) byteIn = " "
+            if (byteOut == null) byteOut = " "
+            //updateConnectionStatus(duration, lastPacketReceive, byteIn, byteOut)
+        } catch (e: java.lang.Exception) {
+            e.printStackTrace()
+        }
     }
 }

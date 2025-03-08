@@ -12,6 +12,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.IBinder;
+import android.util.Log;
 
 
 import de.blinkt.openvpn.core.OpenVPNService;
@@ -37,6 +38,7 @@ public class DisconnectVPNActivity extends Activity implements DialogInterface.O
     @Override
     protected void onResume() {
         super.onResume();
+        Log.d("OpenVPNEDIT", "onResume");
         Intent intent = new Intent(this, OpenVPNService.class);
         intent.setAction(OpenVPNService.START_SERVICE);
         bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
@@ -46,10 +48,12 @@ public class DisconnectVPNActivity extends Activity implements DialogInterface.O
     @Override
     protected void onPause() {
         super.onPause();
+        Log.d("OpenVPNEDIT", "onPause");
         unbindService(mConnection);
     }
 
     private void showDisconnectDialog() {
+        Log.d("OpenVPNEDIT", "showDisconnectDialog");
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle(R.string.title_cancel);
