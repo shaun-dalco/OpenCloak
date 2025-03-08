@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -44,6 +45,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import com.hotmail.shaundalco.opencloak.model.Server
 import de.blinkt.openvpn.OpenVpnApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
@@ -120,16 +123,33 @@ fun VPNMapScreen() {
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
     val screenHeight = configuration.screenHeightDp.dp
+    val coroutineScope = rememberCoroutineScope()
+    val density = LocalDensity.current
+
+    // Convert target Dp values to pixels
+    val targetX = with(density) { 1000.dp.toPx().toInt() }
+    val targetY = with(density) { 500.dp.toPx().toInt() }
+    val screenWidthPx = with(density) { screenWidth.toPx().toInt() }
+    val screenHeightPx = with(density) { screenHeight.toPx().toInt() }
+
+    // Center the initial scroll position around (200.dp, 150.dp)
+    LaunchedEffect(Unit) {
+        coroutineScope.launch {
+            delay(100L) // Small delay to allow UI composition
+            horizontalScrollState.scrollTo(targetX - screenWidthPx / 2 + 250)
+            verticalScrollState.scrollTo(targetY - screenHeightPx / 2 + 250)
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .horizontalScroll(horizontalScrollState)
                 .verticalScroll(verticalScrollState)
-                .size(width = screenWidth * 3, height = screenHeight)
+                .size(width = screenWidth * 4, height = screenHeight * 2)
         ) {
             Image(
-                painter = painterResource(id = R.drawable.bluemap), // Replace with your world map drawable
+                painter = painterResource(id = R.drawable.bluemap2), // Replace with your world map drawable
                 contentDescription = "World Map",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.FillBounds
@@ -144,9 +164,9 @@ fun VPNMapScreen() {
 @Composable
 fun NodeOverlay() {
     val nodes = listOf(
-        NodeData("USA", 200.dp, 150.dp),
-        NodeData("UK", 500.dp, 100.dp),
-        NodeData("Australia", 800.dp, 400.dp),
+        NodeData("RUSSIA", 1000.dp, 500.dp),
+        NodeData("CANADA", 400.dp, 500.dp),
+        NodeData("Australia", 1100.dp, 900.dp),
         NodeData("Japan", 900.dp, 200.dp),
         NodeData("Germany", 600.dp, 120.dp)
     )
