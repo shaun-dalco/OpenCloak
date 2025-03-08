@@ -24,15 +24,21 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,6 +51,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -90,7 +98,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            VPNMapScreen()
+            MainScreen()
             ConnectButton()
         }
     }
@@ -175,6 +183,142 @@ fun VPNMapScreen() {
 
 var currentVpn by mutableStateOf<Int?>(0) // Global variable to track selected node index
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen() {
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
+    val scrollState = rememberScrollState()
+    val nodePositions = remember { mutableMapOf<Int, Dp>() } // Stores node Y positions
+    var showSettingsMenu by remember { mutableStateOf(false) } // Controls the settings menu
+
+    val nodes = listOf(
+        NodeData("RUSSIA", 1000.dp, 500.dp),
+        NodeData("CANADA", 400.dp, 500.dp),
+        NodeData("Australia", 1100.dp, 900.dp),
+        NodeData("Japan", 900.dp, 200.dp),
+        NodeData("Germany", 600.dp, 120.dp)
+    )
+
+    val selectedCountry by derivedStateOf { nodes[currentVpn!!].country } // Observe changes
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            NavigationDrawerContent(drawerState, scrollState, nodePositions, nodes)
+        }
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("VPN: $selectedCountry", color = Color.White) }, // White text
+                    navigationIcon = {
+                        IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
+                            Icon(Icons.Default.Menu, contentDescription = "Open Drawer", tint = Color.White)
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { showSettingsMenu = true }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
+                        }
+
+                        DropdownMenu(
+                            expanded = showSettingsMenu,
+                            onDismissRequest = { showSettingsMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Enable Dark Mode") },
+                                onClick = {
+                                    showSettingsMenu = false
+                                    // TODO: Implement dark mode toggle logic
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Set Custom VPN") },
+                                onClick = {
+                                    showSettingsMenu = false
+                                    // TODO: Implement custom VPN selection
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("About") },
+                                onClick = {
+                                    showSettingsMenu = false
+                                    // TODO: Show an About dialog
+                                }
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.DarkGray, // Dark background
+                        titleContentColor = Color.White, // White title text
+                        navigationIconContentColor = Color.White, // White drawer icon
+                        actionIconContentColor = Color.White // White settings icon
+                    )
+                )
+            }
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                VPNMapScreen() // Background map
+                NodeOverlay() // Nodes on top
+            }
+        }
+    }
+}
+
+@Composable
+fun NavigationDrawerContent(
+    drawerState: DrawerState,
+    scrollState: ScrollState,
+    nodePositions: MutableMap<Int, Dp>,
+    nodes: List<NodeData>
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val drawerWidthFraction = 0.25f // 1/4 of the screen width
+
+    ModalDrawerSheet(
+        drawerContainerColor = Color.DarkGray,
+        modifier = Modifier
+            .fillMaxHeight()
+            .fillMaxWidth(drawerWidthFraction) // Set drawer width to 1/4 of screen width
+    ) {
+        Text(
+            text = "Select a VPN",
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White,
+            modifier = Modifier.padding(16.dp)
+        )
+
+        LazyColumn {
+            itemsIndexed(nodes) { index, node ->
+                Text(
+                    text = node.country,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                        .clickable {
+                            currentVpn = index
+                            coroutineScope.launch {
+                                delay(100)
+                                scrollState.animateScrollBy(nodePositions[index]?.value ?: 0f)
+                                drawerState.close()
+                            }
+                        }
+                        .background(if (currentVpn == index) Color.Gray else Color.Transparent),
+                    color = Color.White
+                )
+            }
+        }
+    }
+}
+
+
+
+
 @Composable
 fun NodeOverlay() {
     val nodes = listOf(
@@ -194,7 +338,8 @@ fun NodeOverlay() {
 
 @Composable
 fun Node(node: NodeData, index: Int) {
-    val selected = currentVpn == index // Check if this node is the selected one
+    val selected = currentVpn == index
+    val density = LocalDensity.current
 
     val dotColor by animateColorAsState(
         targetValue = if (selected) Color.Green else Color.Red,
@@ -221,7 +366,10 @@ fun Node(node: NodeData, index: Int) {
     Box(
         modifier = Modifier
             .absoluteOffset(x = node.x, y = node.y)
-            .size(40.dp),
+            .size(40.dp)
+            .onGloballyPositioned { coordinates ->
+                val yPosition = with(density) { coordinates.positionInParent().y.toDp() }
+            },
     ) {
         Canvas(
             modifier = Modifier.matchParentSize()
@@ -230,14 +378,13 @@ fun Node(node: NodeData, index: Int) {
             val radius = size.minDimension / 2 - strokeWidth / 2
 
             withTransform({
-                rotate(rotation, pivot = Offset(size.width / 2, size.height / 2)) // Rotating around center
+                rotate(rotation, pivot = Offset(size.width / 2, size.height / 2))
             }) {
-                // Draw four arc segments with gaps at top, bottom, left, right
                 for (angle in listOf(0f, 90f, 180f, 270f)) {
                     drawArc(
                         color = Color.Gray,
-                        startAngle = angle - 30f, // Small cut space
-                        sweepAngle = 60f, // Arc length
+                        startAngle = angle - 30f,
+                        sweepAngle = 60f,
                         useCenter = false,
                         style = Stroke(width = strokeWidth),
                         size = Size(radius * 2, radius * 2),
@@ -256,7 +403,7 @@ fun Node(node: NodeData, index: Int) {
                 .clip(CircleShape)
                 .background(dotColor)
                 .align(Alignment.Center)
-                .clickable { currentVpn = if (selected) null else index } // Update global state
+                .clickable { currentVpn = index }
         )
     }
 }
