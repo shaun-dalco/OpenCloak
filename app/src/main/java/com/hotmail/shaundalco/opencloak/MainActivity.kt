@@ -1,5 +1,6 @@
 package com.hotmail.shaundalco.opencloak
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
@@ -62,6 +63,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
+import com.chihsuanwu.freescroll.freeScroll
+import com.chihsuanwu.freescroll.rememberFreeScrollState
 import com.hotmail.shaundalco.opencloak.model.Server
 import de.blinkt.openvpn.OpenVpnApi
 import kotlinx.coroutines.delay
@@ -137,13 +140,18 @@ fun ConnectButton() {
 
 @Composable
 fun VPNMapScreen() {
-    val horizontalScrollState = rememberScrollState()
-    val verticalScrollState = rememberScrollState()
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
     val screenHeight = configuration.screenHeightDp.dp
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
+
+    // Define the target dimensions for the image
+    val imageWidth = screenWidth * 4
+    val imageHeight = screenHeight * 2
+
+    // Initialize freeScroll state
+    val freeScrollState = rememberFreeScrollState()
 
     // Convert target Dp values to pixels
     val targetX = with(density) { 1000.dp.toPx().toInt() }
@@ -151,27 +159,34 @@ fun VPNMapScreen() {
     val screenWidthPx = with(density) { screenWidth.toPx().toInt() }
     val screenHeightPx = with(density) { screenHeight.toPx().toInt() }
 
-    // Center the initial scroll position around (200.dp, 150.dp)
+    // Center the initial scroll position
     LaunchedEffect(Unit) {
         coroutineScope.launch {
             delay(100L) // Small delay to allow UI composition
-            horizontalScrollState.scrollTo(targetX - screenWidthPx / 2 + 250)
-            verticalScrollState.scrollTo(targetY - screenHeightPx / 2 + 250)
+            freeScrollState.scrollBy(
+                Offset(
+                    x = (targetX - screenWidthPx / 2 + 250).toFloat(),
+                    y = (targetY - screenHeightPx / 2 + 250).toFloat()
+                )
+            )
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .freeScroll(state = freeScrollState) // Enables free diagonal scrolling
+    ) {
         Box(
             modifier = Modifier
-                .horizontalScroll(horizontalScrollState)
-                .verticalScroll(verticalScrollState)
-                .size(width = screenWidth * 4, height = screenHeight * 2)
+                .size(imageWidth, imageHeight) // Ensures the image is larger than the screen
         ) {
             Image(
-                painter = painterResource(id = R.drawable.bluemap2), // Replace with your world map drawable
+                painter = painterResource(id = R.drawable.bluemap2),
                 contentDescription = "World Map",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.FillBounds
+                modifier = Modifier
+                    .matchParentSize(), // Ensures the image fills the large box
+                contentScale = ContentScale.FillBounds // Makes sure the image fills without stretching
             )
 
             // Overlay nodes
@@ -181,8 +196,11 @@ fun VPNMapScreen() {
     }
 }
 
+
+
 var currentVpn by mutableStateOf<Int?>(0) // Global variable to track selected node index
 
+@SuppressLint("UnrememberedMutableState")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen() {
