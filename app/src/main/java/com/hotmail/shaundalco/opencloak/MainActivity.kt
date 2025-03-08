@@ -13,17 +13,34 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import com.hotmail.shaundalco.opencloak.model.Server
 import de.blinkt.openvpn.OpenVpnApi
@@ -35,15 +52,16 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.security.AccessController.getContext
 
+val servers = listOf(
+    Server("USA", "https://flagcdn.com/us.png", "us.ovpn", "freeopenvpn", "889369906"),
+    Server("UK", "https://flagcdn.com/gb.png", "japan.ovpn"),
+    Server("Germany", "https://flagcdn.com/de.png", "sweden.ovpn")
+)
+
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val servers = listOf(
-            Server("USA", "https://flagcdn.com/us.png", "us.ovpn", "freeopenvpn", "889369906"),
-            Server("UK", "https://flagcdn.com/gb.png", "japan.ovpn"),
-            Server("Germany", "https://flagcdn.com/de.png", "sweden.ovpn")
-        )
 
         try {
             println("🔹 Loading OpenVPN binary...")
@@ -58,79 +76,110 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            VPNServerListScreen(servers)
+            VPNMapScreen()
+            ConnectButton()
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VPNServerListScreen(servers: List<Server>) {
+fun ConnectButton() {
+    val pulseAnimation = rememberInfiniteTransition()
     val context = LocalContext.current
-    var vpnPermissionGranted by remember { mutableStateOf(VpnService.prepare(context) == null) }
+    val scale by pulseAnimation.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
 
-    // Launcher to request VPN permission
-    val vpnPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        vpnPermissionGranted = result.resultCode == Activity.RESULT_OK
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("OpenCloak VPN") })
-        }
-    ) { paddingValues ->
-        LazyColumn(
+    Box(
+        modifier = Modifier
+            .fillMaxSize(),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Button(
+            onClick = { startVpn(context, servers[0]) },
             modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
+                .padding(bottom = 50.dp)
+                .size((150 * scale).dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Gray),
+            shape = CircleShape
         ) {
-            items(servers) { server ->
-                VPNServerItem(server) {
-                    if (vpnPermissionGranted) {
-                        startVpn(context, server)
-                    } else {
-                        val intent = VpnService.prepare(context)
-                        if (intent != null) {
-                            vpnPermissionLauncher.launch(intent)
-                        } else {
-                            vpnPermissionGranted = true
-                            startVpn(context, server)
-                        }
-                    }
-                }
-            }
+            Text("CONNECT", color = Color.White, fontSize = 18.sp)
         }
     }
 }
 
 @Composable
-fun VPNServerItem(server: Server, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Image(
-            painter = rememberAsyncImagePainter(server.flagUrl),
-            contentDescription = "Flag",
+fun VPNMapScreen() {
+    val horizontalScrollState = rememberScrollState()
+    val verticalScrollState = rememberScrollState()
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val screenHeight = configuration.screenHeightDp.dp
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
             modifier = Modifier
-                .size(40.dp)
-                .padding(end = 8.dp)
-        )
-        Text(
-            text = server.country ?: "Unknown",
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyLarge
-        )
-        Button(onClick = { onClick() }) {
-            Text("Connect")
+                .horizontalScroll(horizontalScrollState)
+                .verticalScroll(verticalScrollState)
+                .size(width = screenWidth * 3, height = screenHeight)
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.bluemap), // Replace with your world map drawable
+                contentDescription = "World Map",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.FillBounds
+            )
+
+            // Overlay nodes
+            NodeOverlay()
         }
     }
 }
+
+@Composable
+fun NodeOverlay() {
+    val nodes = listOf(
+        NodeData("USA", 200.dp, 150.dp),
+        NodeData("UK", 500.dp, 100.dp),
+        NodeData("Australia", 800.dp, 400.dp),
+        NodeData("Japan", 900.dp, 200.dp),
+        NodeData("Germany", 600.dp, 120.dp)
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        nodes.forEach { node ->
+            Node(node)
+        }
+    }
+}
+
+@Composable
+fun Node(node: NodeData) {
+    var selected by remember { mutableStateOf(false) }
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .absoluteOffset(x = node.x, y = node.y)
+            .size(30.dp)
+    ) {
+        Button(
+            onClick = { selected = !selected },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (selected) Color.Green else Color.Red
+            ),
+            modifier = Modifier.size(30.dp)
+        ) {}
+    }
+}
+
+data class NodeData(val country: String, val x: Dp, val y: Dp)
+
 
 fun startVpn(context: Context, server: Server) {
 
