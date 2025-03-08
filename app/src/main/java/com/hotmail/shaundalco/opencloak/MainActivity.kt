@@ -13,13 +13,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -32,7 +37,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -157,9 +168,12 @@ fun VPNMapScreen() {
 
             // Overlay nodes
             NodeOverlay()
+            println("currentVpn: $currentVpn")
         }
     }
 }
+
+var currentVpn by mutableStateOf<Int?>(0) // Global variable to track selected node index
 
 @Composable
 fun NodeOverlay() {
@@ -172,33 +186,83 @@ fun NodeOverlay() {
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
-        nodes.forEach { node ->
-            Node(node)
+        nodes.forEachIndexed { index, node ->
+            Node(node, index)
         }
     }
 }
 
 @Composable
-fun Node(node: NodeData) {
-    var selected by remember { mutableStateOf(false) }
+fun Node(node: NodeData, index: Int) {
+    val selected = currentVpn == index // Check if this node is the selected one
+
+    val dotColor by animateColorAsState(
+        targetValue = if (selected) Color.Green else Color.Red,
+        animationSpec = tween(durationMillis = 300)
+    )
+
+    val pulse by animateFloatAsState(
+        targetValue = if (selected) 1.3f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+
+    val rotation by rememberInfiniteTransition().animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        )
+    )
 
     Box(
-        contentAlignment = Alignment.Center,
         modifier = Modifier
             .absoluteOffset(x = node.x, y = node.y)
-            .size(30.dp)
+            .size(40.dp),
     ) {
-        Button(
-            onClick = { selected = !selected },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (selected) Color.Green else Color.Red
-            ),
-            modifier = Modifier.size(30.dp)
-        ) {}
+        Canvas(
+            modifier = Modifier.matchParentSize()
+        ) {
+            val strokeWidth = 3.dp.toPx()
+            val radius = size.minDimension / 2 - strokeWidth / 2
+
+            withTransform({
+                rotate(rotation, pivot = Offset(size.width / 2, size.height / 2)) // Rotating around center
+            }) {
+                // Draw four arc segments with gaps at top, bottom, left, right
+                for (angle in listOf(0f, 90f, 180f, 270f)) {
+                    drawArc(
+                        color = Color.Gray,
+                        startAngle = angle - 30f, // Small cut space
+                        sweepAngle = 60f, // Arc length
+                        useCenter = false,
+                        style = Stroke(width = strokeWidth),
+                        size = Size(radius * 2, radius * 2),
+                        topLeft = Offset(
+                            (size.width - radius * 2) / 2,
+                            (size.height - radius * 2) / 2
+                        )
+                    )
+                }
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .size((20 * pulse).dp)
+                .clip(CircleShape)
+                .background(dotColor)
+                .align(Alignment.Center)
+                .clickable { currentVpn = if (selected) null else index } // Update global state
+        )
     }
 }
 
 data class NodeData(val country: String, val x: Dp, val y: Dp)
+
 
 
 fun startVpn(context: Context, server: Server) {
