@@ -81,11 +81,11 @@ val servers = listOf(
 )
 
 val nodes = listOf(
-    NodeData("Russia", 1000.dp, 500.dp),
-    NodeData("Canada", 400.dp, 500.dp),
-    NodeData("Australia", 1100.dp, 900.dp),
-    NodeData("Japan", 900.dp, 200.dp),
-    NodeData("Germany", 600.dp, 120.dp)
+    NodeData("Russia", 1600.dp, 500.dp),
+    NodeData("Canada", 600.dp, 500.dp),
+    NodeData("Australia", 1700.dp, 1000.dp),
+    NodeData("Japan", 1740.dp, 670.dp),
+    NodeData("Germany", 1135.dp, 575.dp)
 )
 
 private val vpnStateFlow = MutableStateFlow("LEVEL_NOTCONNECTED") // Holds the latest VPN state
@@ -237,7 +237,7 @@ fun VPNMapScreen() {
     val density = LocalDensity.current
 
     // Define the target dimensions for the image
-    val imageWidth = screenWidth * 4
+    val imageWidth = screenWidth * 6
     val imageHeight = screenHeight * 2
 
     // Initialize freeScroll state
@@ -272,7 +272,7 @@ fun VPNMapScreen() {
                 .size(imageWidth, imageHeight) // Ensures the image is larger than the screen
         ) {
             Image(
-                painter = painterResource(id = R.drawable.bluemap2),
+                painter = painterResource(id = R.drawable.worldmap),
                 contentDescription = "World Map",
                 modifier = Modifier
                     .matchParentSize(), // Ensures the image fills the large box
